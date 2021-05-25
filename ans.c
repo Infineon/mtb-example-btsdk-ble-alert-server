@@ -266,7 +266,7 @@ void ans_application_init(void)
         .notification_control = HDLC_ANS_ALERT_NOTIFICATION_CONTROL_POINT_VALUE,
     };
 
-#if !defined(CYW20735B1) && !defined(CYW20819A1) && !defined(CYW20719B2) && !defined(CYW20721B2)
+#if !defined(CYW20735B1) && !defined(CYW20835B1) && !defined(CYW20819A1) && !defined(CYW20719B2) && !defined(CYW20721B2)
     /* Initialize wiced app */
     wiced_bt_app_init();
 #endif
