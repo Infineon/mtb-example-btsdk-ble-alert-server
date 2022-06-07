@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2021, Cypress Semiconductor Corporation (an Infineon company) or
+ * Copyright 2016-2022, Cypress Semiconductor Corporation (an Infineon company) or
  * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
  *
  * This software, including source code, documentation and related
@@ -92,6 +92,11 @@
 #include "wiced_bt_stack.h"
 #include "wiced_transport.h"
 #include "wiced_hal_puart.h"
+#include "wiced_timer.h"
+
+#if !defined(CYW20706A2) && (!defined(CYW43012C0) || (defined(USE_DESIGN_MODUS) && USE_DESIGN_MODUS))
+#include "cycfg_pins.h"
+#endif
 
 #if ( defined(CYW20706A2) || defined(CYW20719B1) || defined(CYW20719B0) || defined(CYW20721B1) || defined(CYW20735B0) || defined(CYW43012C0) )
 #include "wiced_bt_app_common.h"
@@ -99,6 +104,9 @@
 #endif
 
 #include "wiced_platform.h"
+
+/* App Timer Timeout in seconds  */
+#define ANS_APP_TIMEOUT_IN_SECONDS                 1
 
 #ifdef CYW20706A2
 #define APP_BUTTON_SETTINGS       WICED_GPIO_BUTTON_SETTINGS( GPIO_EN_INT_RISING_EDGE )
@@ -118,6 +126,8 @@
  ******************************************************/
 extern const wiced_bt_cfg_settings_t wiced_app_cfg_settings;
 extern const wiced_bt_cfg_buf_pool_t wiced_app_cfg_buf_pools[];
+uint32_t ans_app_timer_count = 0;
+wiced_timer_t ans_second_timer;
 
 /******************************************************
  *                     Structures
@@ -152,10 +162,8 @@ static void                   ans_transport_status( wiced_transport_type_t type 
 static uint32_t               ans_proc_rx_hci_cmd(uint8_t *p_data, uint32_t length);
 static void                   ans_trace_callback(wiced_bt_hci_trace_type_t type, uint16_t length, uint8_t* p_data);
 static void                   ans_start_scan (void);
-
-#ifdef ANS_UNIT_TESTING
 static void                   ans_app_timeout( uint32_t arg );
-#endif
+
 
 /******************************************************
  *               Variables Definitions
@@ -271,10 +279,8 @@ void ans_application_init(void)
     wiced_bt_app_init();
 #endif
 
-#ifndef CYW43012C0
     /* Configure buttons available on the platform */
     ans_configure_button();
-#endif
 
     /* Initialize WICED BT ANS library */
     result = wiced_bt_ans_init(&gatt_handles);
@@ -314,13 +320,12 @@ void ans_application_init(void)
     wiced_bt_ans_set_supported_new_alert_categories(0, ans_app_cb.current_enabled_alert_cat);
     wiced_bt_ans_set_supported_unread_alert_categories(0, ans_app_cb.current_enabled_alert_cat);
 
-#ifdef ANS_UNIT_TESTING
+    wiced_init_timer(&ans_second_timer, ans_app_timeout, 0, WICED_SECONDS_PERIODIC_TIMER);
+    wiced_start_timer( &ans_second_timer, ANS_APP_TIMEOUT_IN_SECONDS );
+
     /* Start scan to find ANS Client */
     result = wiced_bt_ble_scan( BTM_BLE_SCAN_TYPE_HIGH_DUTY, WICED_TRUE, ans_scan_result_cback );
     WICED_BT_TRACE("wiced_bt_ble_scan: %d \n", result);
-
-    wiced_bt_app_start_timer( 1, 0, ans_app_timeout, NULL );
-#endif
 }
 
 /*
@@ -408,9 +413,18 @@ wiced_result_t ans_management_callback(wiced_bt_management_evt_t event, wiced_bt
 /*
  * This function configure for button interrupt.
  */
-#ifndef CYW43012C0
 void ans_configure_button (void)
 {
+#ifdef CYW43012C0
+
+#if defined (NO_BUTTON_SUPPORT)
+#else
+    wiced_hal_gpio_register_pin_for_interrupt( WICED_GPIO_PIN_BUTTON, ans_interrupt_handler, NULL );
+    wiced_hal_gpio_configure_pin( WICED_GPIO_PIN_BUTTON, WICED_GPIO_BUTTON_SETTINGS(GPIO_EN_INT_RISING_EDGE), GPIO_PIN_OUTPUT_LOW);
+#endif
+
+#else //CYW43012C0
+
 #if defined(CYW20706A2) || defined(CYW20719B0)
     wiced_bt_app_init();
 #endif
@@ -430,8 +444,10 @@ void ans_configure_button (void)
 #endif
 
 #endif
+
+#endif //CYW43012C0
 }
-#endif
+
 
 /*
  * This function handles the scan results and attempt to connect to ANS client.
@@ -702,6 +718,9 @@ void ans_start_scan (void)
     {
          result = wiced_bt_ble_scan( BTM_BLE_SCAN_TYPE_HIGH_DUTY, WICED_TRUE, ans_scan_result_cback );
          WICED_BT_TRACE("wiced_bt_ble_scan: %d \n", result);
+    } else
+    {
+        WICED_BT_TRACE("previous scan in progress or connected to ANC already \n");
     }
 }
 
@@ -779,13 +798,15 @@ uint32_t  ans_proc_rx_hci_cmd(uint8_t *p_buffer, uint32_t length)
     return HCI_CONTROL_STATUS_SUCCESS;
 }
 
-#ifdef ANS_UNIT_TESTING
-uint32_t ans_app_timer_count=0;
 void ans_app_timeout( uint32_t arg )
 {
+    static uint32_t previous_time_count;
+
     ans_app_timer_count++;
-    WICED_BT_TRACE("%d \n", ans_app_timer_count);
+    //WICED_BT_TRACE("%d \n", ans_app_timer_count);
 }
+
+#ifdef ANS_UNIT_TESTING
 void test_ans(void)
 {
     wiced_result_t  result;
@@ -851,19 +872,21 @@ void test_ans(void)
 #endif
 
 /* This function is invoked on button interrupt events */
+// For CYW9M2BASE-43012BT no interrupt upon app button push, as on this platform button not connected to BT board.
 void ans_interrupt_handler(void* user_data, uint8_t value )
 {
     wiced_result_t  result;
+    static uint32_t previous_button_time = 0;
+    uint32_t current_time = ans_app_timer_count;
 
 #ifdef ANS_UNIT_TESTING
     test_ans();
 #endif
-
-    /*start scan if not connected and no scan in progress*/
-    if ((ans_app_cb.conn_id == 0) && (wiced_bt_ble_get_current_scan_state() == BTM_BLE_SCAN_TYPE_NONE))
+    if ( (current_time - previous_button_time) > 1) // 1 sec gap to avoid button signal bounce
     {
-        result = wiced_bt_ble_scan( BTM_BLE_SCAN_TYPE_HIGH_DUTY, WICED_TRUE, ans_scan_result_cback );
-        WICED_BT_TRACE("wiced_bt_ble_scan: %d \n", result);
+        WICED_BT_TRACE("ans_interrupt_handler() - Button pressed\n");
+        previous_button_time = current_time;
+        ans_start_scan();
     }
 }
 
