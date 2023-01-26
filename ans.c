@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2022, Cypress Semiconductor Corporation (an Infineon company) or
+ * Copyright 2016-2023, Cypress Semiconductor Corporation (an Infineon company) or
  * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
  *
  * This software, including source code, documentation and related
@@ -35,9 +35,9 @@
 *
 * Alert Notification Server (ANS) snippet application
 *
-* The ANS snippet application shows how to initialize and use WICED BT Alert
+* The ANS snippet application shows how to initialize and use AIROC Bluetooth Alert
 * Notification Server library. ANS implemented in GAP central mode and provides ANS services
-* to ANC using WICED BT ANS library.
+* to ANC using AIROC Bluetooth ANS library.
 *
 * On ClientControl Connect, ANS automatically does Scan and connect to Alert Notification Client (ANC),if
 * ANC is advertising with in the range and ANC includes its name (i.e "ANC") in its ADV.
@@ -54,19 +54,19 @@
 *   User can clear alert count using GUI Clear Alert button.
 * Application calls ANS library APIS based on user requests (i.e. on updating supported alert categories,
 * generate and clear the alert requests).
-* Read/Write requests received from ANC passed to WICED BT ANS library to update the ANC
+* Read/Write requests received from ANC passed to AIROC Bluetooth ANS library to update the ANC
 * configuration (for example to start or stop new alerts/unread alerts and to configure to send
 * only requested alert categories.)
 *
 * To test this snippet app use ClientControl application
 *
 * Features demonstrated
-*  - Initialize and use WICED BT ANS library
+*  - Initialize and use AIROC Bluetooth ANS library
 *  - GATTDB with Alert notification service and characteristics
 
 * To demonstrate the app, work through the following steps.
-* 1.Plug the WICED eval board into your computer
-* 2.Build and download the application (to the WICED board)
+* 1.Plug the AIROC eval board into your computer
+* 2.Build and download the application (to the AIROC board)
 * 3.Start tracing to monitor the activity (see Kit Guide for details)
 * 4 Use ClientControl to update supported alerts.
 * 5 Pair with ANC.
@@ -98,7 +98,7 @@
 #include "cycfg_pins.h"
 #endif
 
-#if ( defined(CYW20706A2) || defined(CYW20719B1) || defined(CYW20719B0) || defined(CYW20721B1) || defined(CYW20735B0) || defined(CYW43012C0) )
+#if ( defined(CYW20706A2) || defined(CYW20719B1) || defined(CYW20721B1) || defined(CYW43012C0) )
 #include "wiced_bt_app_common.h"
 #include "wiced_bt_app_hal_common.h"
 #endif
@@ -111,11 +111,6 @@
 #ifdef CYW20706A2
 #define APP_BUTTON_SETTINGS       WICED_GPIO_BUTTON_SETTINGS( GPIO_EN_INT_RISING_EDGE )
 #define APP_BUTTON_PRESSED_VALUE  WICED_GPIO_BUTTON_DEFAULT_STATE
-#endif
-
-#if (defined (CYW20735B0) || defined(CYW20719B0))
-#define APP_BUTTON_SETTINGS         WICED_GPIO_BUTTON_SETTINGS
-#define APP_BUTTON_PRESSED_VALUE    WICED_BUTTON_PRESSED_VALUE
 #endif
 
 #define ANS_LOCAL_KEYS_NVRAM_ID         WICED_NVRAM_VSID_START
@@ -213,7 +208,7 @@ wiced_transport_buffer_pool_t*  host_trans_pool;
 /*
  * Entry point to the application. Set device configuration and start BT
  * stack initialization.  The actual application initialization will happen
- * when stack reports that BT device is ready
+ * when stack reports that Bluetooth device is ready
  */
 APPLICATION_START()
 {
@@ -233,7 +228,7 @@ APPLICATION_START()
 #else
     // Set to PUART to see traces on peripheral uart(puart)
     wiced_set_debug_uart( WICED_ROUTE_DEBUG_TO_PUART );
-#if ( defined(CYW20706A2) || defined(CYW20735B0) || defined(CYW20719B0) || defined(CYW43012C0) )
+#if ( defined(CYW20706A2) || defined(CYW43012C0) )
     wiced_hal_puart_select_uart_pads( WICED_PUART_RXD, WICED_PUART_TXD, 0, 0);
 #endif
 #endif
@@ -251,7 +246,7 @@ APPLICATION_START()
 }
 
 /*
- * ANS application initialization is executed after BT stack initialization is completed.
+ * ANS application initialization is executed after Bluetooth stack initialization is completed.
  */
 void ans_application_init(void)
 {
@@ -274,15 +269,15 @@ void ans_application_init(void)
         .notification_control = HDLC_ANS_ALERT_NOTIFICATION_CONTROL_POINT_VALUE,
     };
 
-#if !defined(CYW20735B1) && !defined(CYW20835B1) && !defined(CYW20819A1) && !defined(CYW20719B2) && !defined(CYW20721B2)
-    /* Initialize wiced app */
+#if defined(CYW20706A2)
+    /* Initialize app */
     wiced_bt_app_init();
 #endif
 
     /* Configure buttons available on the platform */
     ans_configure_button();
 
-    /* Initialize WICED BT ANS library */
+    /* Initialize AIROC ANS library */
     result = wiced_bt_ans_init(&gatt_handles);
     if (result != WICED_BT_SUCCESS)
         WICED_BT_TRACE("Err: wiced_bt_ans_init failed status:%d\n", result);
@@ -302,7 +297,7 @@ void ans_application_init(void)
     wiced_bt_dev_register_hci_trace(ans_trace_callback);
 #endif
 
-#if defined(CYW20706A2) || defined(CYW20735B0)
+#if defined(CYW20706A2)
     /* Enable privacy to advertise with RPA */
     wiced_bt_ble_enable_privacy ( WICED_TRUE );
 #endif
@@ -425,12 +420,12 @@ void ans_configure_button (void)
 
 #else //CYW43012C0
 
-#if defined(CYW20706A2) || defined(CYW20719B0)
+#if defined(CYW20706A2)
     wiced_bt_app_init();
 #endif
 
     /* Configure buttons available on the platform (pin should be configured before registering interrupt handler ) */
-#if defined(CYW20735B0) || defined(CYW20719B0) || defined(CYW20706A2)
+#if defined(CYW20706A2)
     wiced_hal_gpio_configure_pin( WICED_GPIO_PIN_BUTTON, APP_BUTTON_SETTINGS, APP_BUTTON_PRESSED_VALUE );
     wiced_hal_gpio_register_pin_for_interrupt( WICED_GPIO_PIN_BUTTON, ans_interrupt_handler, NULL );
 #else
@@ -702,7 +697,7 @@ void ans_transport_status( wiced_transport_type_t type )
 {
      WICED_BT_TRACE("HCI_CONTROL_ANS_EVENT_ANS_ENABLED\n");
 
-    /* Now onwards redirect all traces to BT Spy log */
+    /* Now onwards redirect all traces to BTSpy log */
     wiced_set_debug_uart( WICED_ROUTE_DEBUG_TO_WICED_UART );
 
     /* tell to ClientControl on current supported categories. User can enable and and disable in the supported if required */
@@ -744,7 +739,7 @@ uint32_t  ans_proc_rx_hci_cmd(uint8_t *p_buffer, uint32_t length)
         return HCI_CONTROL_STATUS_INVALID_ARGS;
     }
 
-    //Expected minimum 4 byte as the wiced header
+    //Expected minimum 4 byte as the header
     if (length < 4)
     {
         WICED_BT_TRACE("invalid params\n");
@@ -872,7 +867,7 @@ void test_ans(void)
 #endif
 
 /* This function is invoked on button interrupt events */
-// For CYW9M2BASE-43012BT no interrupt upon app button push, as on this platform button not connected to BT board.
+// For CYW9M2BASE-43012BT no interrupt upon app button push, as on this platform button not connected to the Bluetooth board.
 void ans_interrupt_handler(void* user_data, uint8_t value )
 {
     wiced_result_t  result;
